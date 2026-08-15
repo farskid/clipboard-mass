@@ -170,6 +170,13 @@
       const hook = { x: 240, y: 180, vx: 0, vy: 0 };
       const pend = { theta: 0, omega: 0 };
       let wasEmpty = true;
+      let appear = 1;
+
+      function easeOutBack(t) {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2;
+      }
 
       function gramsOf(text) {
         const n = text.replace(/\s+/g, " ").trim().length;
@@ -257,6 +264,7 @@
           hook.vy = 0;
           pend.theta = 0;
           pend.omega = 0;
+          appear = 1;
           requestAnimationFrame(tick);
           return;
         }
@@ -265,9 +273,16 @@
           hook.x = mouse.x;
           hook.y = mouse.y;
           hook.vx = 0;
-          hook.vy = 0;
+          hook.vy = 80;
+          pend.theta = 0.9;
+          pend.omega = -9;
+          appear = 0;
           wasEmpty = false;
         }
+
+        appear = Math.min(1, appear + dt / 0.45);
+        const pop = appear < 1 ? easeOutBack(appear) : 1;
+        const fade = Math.min(1, appear / 0.28);
 
         const mass = 1 + g / 16;
         const stiffness = 240 / (1 + g / 28);
@@ -299,10 +314,10 @@
         }
 
         const deg = (pend.theta * 180) / Math.PI;
-        rig.style.opacity = "1";
+        rig.style.opacity = String(fade);
         rig.setAttribute(
           "transform",
-          `translate(${hook.x} ${hook.y}) rotate(${deg}) scale(${scale})`,
+          `translate(${hook.x} ${hook.y}) rotate(${deg}) scale(${scale * pop})`,
         );
 
         const lookL = pupilLook(eyeL);
