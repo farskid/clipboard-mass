@@ -133,6 +133,20 @@
             d="M239.89,198.12l-14.26-120a16,16,0,0,0-16-14.12H176a48,48,0,0,0-96,0H46.33a16,16,0,0,0-16,14.12l-14.26,120A16,16,0,0,0,20,210.6a16.13,16.13,0,0,0,12,5.4H223.92A16.13,16.13,0,0,0,236,210.6,16,16,0,0,0,239.89,198.12ZM128,32a32,32,0,0,1,32,32H96A32,32,0,0,1,128,32Z"
           />
         </g>
+        <path
+          id="brow-l"
+          fill="none"
+          stroke="#111"
+          stroke-width="2.4"
+          stroke-linecap="round"
+        />
+        <path
+          id="brow-r"
+          fill="none"
+          stroke="#111"
+          stroke-width="2.4"
+          stroke-linecap="round"
+        />
         <g id="eye-l" transform="translate(-13 40)">
           <circle r="13" fill="#fff" stroke="#111" stroke-width="2" />
           <g clip-path="url(#clip-l)">
@@ -146,6 +160,22 @@
             <circle id="pupil-r" r="7" fill="#111" />
             <circle id="glint-r" r="2.2" fill="#fff" />
           </g>
+        </g>
+        <path
+          id="mouth"
+          fill="none"
+          stroke="#111"
+          stroke-width="2.4"
+          stroke-linecap="round"
+        />
+        <ellipse id="gasp" cx="0" cy="60" rx="4" ry="5" fill="#111" opacity="0" />
+        <g id="sweat" opacity="0">
+          <path
+            d="M 24 22 C 24 22 20 30 24 34 C 28 30 24 22 24 22 Z"
+            fill="#7ec8ff"
+            stroke="#111"
+            stroke-width="1.2"
+          />
         </g>
       </g>
     </svg>
@@ -163,7 +193,13 @@
       const pupilR = document.getElementById("pupil-r");
       const glintL = document.getElementById("glint-l");
       const glintR = document.getElementById("glint-r");
+      const browL = document.getElementById("brow-l");
+      const browR = document.getElementById("brow-r");
+      const mouth = document.getElementById("mouth");
+      const gasp = document.getElementById("gasp");
+      const sweat = document.getElementById("sweat");
       const lookPt = stage.createSVGPoint();
+      let face = 0;
 
       const cargo = [];
       const mouse = { x: 240, y: 180 };
@@ -207,6 +243,31 @@
         if (cargo.length === 0) return;
         cargo.pop();
         renderWeight();
+      }
+
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
+
+      function applyFace(target, surprise) {
+        face += (target - face) * 0.12;
+        const t = face;
+        const browInner = lerp(22, 32, t);
+        const browOuter = lerp(24, 20, t);
+        browL.setAttribute("d", `M -24 ${browOuter} Q -13 ${lerp(20, 28, t)} -4 ${browInner}`);
+        browR.setAttribute("d", `M 24 ${browOuter} Q 13 ${lerp(20, 28, t)} 4 ${browInner}`);
+
+        const endY = lerp(56, 63, t);
+        const ctrlY = lerp(70, 50, t);
+        mouth.setAttribute("d", `M -9 ${endY} Q 0 ${ctrlY} 9 ${endY}`);
+        mouth.style.opacity = surprise > 0.45 ? "0" : "1";
+        gasp.setAttribute("opacity", String(Math.max(0, surprise * 1.2 - 0.15)));
+        gasp.setAttribute("ry", String(lerp(3.5, 6.5, surprise)));
+
+        const squint = lerp(1.06, 0.58, t);
+        eyeL.setAttribute("transform", `translate(-13 40) scale(1 ${squint})`);
+        eyeR.setAttribute("transform", `translate(13 40) scale(1 ${squint})`);
+        sweat.setAttribute("opacity", String(Math.max(0, t - 0.42) / 0.58));
       }
 
       function pupilLook(eyeGroup) {
@@ -265,6 +326,7 @@
           pend.theta = 0;
           pend.omega = 0;
           appear = 1;
+          face = 0;
           requestAnimationFrame(tick);
           return;
         }
@@ -330,6 +392,14 @@
         glintL.setAttribute("cy", String(lookL.y + GLINT.y));
         glintR.setAttribute("cx", String(lookR.x + GLINT.x));
         glintR.setAttribute("cy", String(lookR.y + GLINT.y));
+
+        const loadStrain = Math.min(1, g / 90);
+        const motion = Math.min(
+          1,
+          Math.hypot(hook.vx, hook.vy) / 420 + Math.abs(pend.omega) / 9,
+        );
+        const surprise = 1 - Math.min(1, appear / 0.38);
+        applyFace(Math.min(1, loadStrain * 0.82 + motion * 0.28), surprise);
 
         requestAnimationFrame(tick);
       }
