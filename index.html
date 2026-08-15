@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clipboard mass</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #141414;
+        --text: #f0f0f0;
+        --muted: color-mix(in srgb, var(--text) 55%, transparent);
+        --accent: #4d7cff;
+        --on-accent: #f0f0f0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+
+      main {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 30px;
+        font-weight: 590;
+        text-align: center;
+        user-select: text;
+      }
+
+      #weight {
+        margin-top: 10px;
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--muted);
+      }
+
+      #stage {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        overflow: visible;
+        z-index: 40;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Select some text and copy it</h1>
+      <div id="weight">empty</div>
+    </main>
+
+    <svg id="stage" aria-hidden="true">
+      <g id="rig" style="opacity: 0">
+        <!-- Phosphor handbag-simple-fill · MIT · phosphoricons.com -->
+        <svg x="-40" y="-5" width="80" height="80" viewBox="0 0 256 256">
+          <path
+            fill="var(--accent)"
+            d="M239.89,198.12l-14.26-120a16,16,0,0,0-16-14.12H176a48,48,0,0,0-96,0H46.33a16,16,0,0,0-16,14.12l-14.26,120A16,16,0,0,0,20,210.6a16.13,16.13,0,0,0,12,5.4H223.92A16.13,16.13,0,0,0,236,210.6,16,16,0,0,0,239.89,198.12ZM128,32a32,32,0,0,1,32,32H96A32,32,0,0,1,128,32Z"
+          />
+        </svg>
+        <circle id="eye-l" cx="-13" cy="44" r="11.5" fill="var(--on-accent)" />
+        <circle id="eye-r" cx="13" cy="44" r="11.5" fill="var(--on-accent)" />
+        <circle id="pupil-l" cx="-13" cy="44" r="5.2" fill="var(--text)" />
+        <circle id="pupil-r" cx="13" cy="44" r="5.2" fill="var(--text)" />
+        <circle id="glint-l" cx="-15.2" cy="41.6" r="1.7" fill="var(--on-accent)" />
+        <circle id="glint-r" cx="10.8" cy="41.6" r="1.7" fill="var(--on-accent)" />
+      </g>
+    </svg>
+
+    <script>
+      const EYE_L = { x: -13, y: 44 };
+      const EYE_R = { x: 13, y: 44 };
+      const PUPIL_TRAVEL = 5.4;
+      const GLINT = { x: -2.2, y: -2.4 };
+
+      const weightEl = document.getElementById("weight");
+      const rig = document.getElementById("rig");
+      const pupilL = document.getElementById("pupil-l");
+      const pupilR = document.getElementById("pupil-r");
+      const glintL = document.getElementById("glint-l");
+      const glintR = document.getElementById("glint-r");
+
+      const cargo = [];
+      const mouse = { x: 240, y: 180 };
+      const hook = { x: 240, y: 180, vx: 0, vy: 0 };
+      const pend = { theta: 0, omega: 0 };
+      let wasEmpty = true;
+
+      function gramsOf(text) {
+        const n = text.replace(/\s+/g, " ").trim().length;
+        return Math.max(1, Math.round(n * 0.5));
+      }
+
+      function grams() {
+        return cargo.reduce((sum, item) => sum + item.grams, 0);
+      }
+
+      function bagScale(g) {
+        return 0.55 + Math.min(1.85, Math.sqrt(Math.max(g, 1)) / 7);
+      }
+
+      function renderWeight() {
+        const g = grams();
+        weightEl.textContent = g > 0 ? `${g} g` : "empty";
+      }
+
+      function load(text) {
+        const trimmed = text.replace(/\s+/g, " ").trim();
+        if (!trimmed) return;
+        cargo.push({ grams: gramsOf(trimmed) });
+        renderWeight();
+      }
+
+      function unloadOne() {
+        if (cargo.length === 0) return;
+        cargo.pop();
+        renderWeight();
+      }
+
+      function pupilLook(eyeX, eyeY, hookX, hookY, theta, scale, mouseX, mouseY) {
+        const c = Math.cos(theta);
+        const s = Math.sin(theta);
+        const worldX = hookX + (eyeX * c - eyeY * s) * scale;
+        const worldY = hookY + (eyeX * s + eyeY * c) * scale;
+        const dx = mouseX - worldX;
+        const dy = mouseY - worldY;
+        const localDx = dx * c + dy * s;
+        const localDy = -dx * s + dy * c;
+        const len = Math.hypot(localDx, localDy) || 1;
+        return {
+          x: (localDx / len) * PUPIL_TRAVEL,
+          y: (localDy / len) * PUPIL_TRAVEL,
+        };
+      }
+
+      document.addEventListener("copy", () => {
+        const selected = window.getSelection()?.toString() ?? "";
+        if (selected.trim()) load(selected);
+      });
+
+      document.addEventListener("paste", (event) => {
+        if (cargo.length === 0) return;
+        event.preventDefault();
+        unloadOne();
+      });
+
+      document.addEventListener(
+        "pointermove",
+        (event) => {
+          mouse.x = event.clientX;
+          mouse.y = event.clientY;
+        },
+        { passive: true },
+      );
+
+      let last = performance.now();
+
+      function tick(now) {
+        const dt = Math.min(0.032, (now - last) / 1000);
+        last = now;
+        const g = grams();
+
+        if (g <= 0) {
+          wasEmpty = true;
+          rig.style.opacity = "0";
+          hook.x = mouse.x;
+          hook.y = mouse.y;
+          hook.vx = 0;
+          hook.vy = 0;
+          pend.theta = 0;
+          pend.omega = 0;
+          requestAnimationFrame(tick);
+          return;
+        }
+
+        if (wasEmpty) {
+          hook.x = mouse.x;
+          hook.y = mouse.y;
+          hook.vx = 0;
+          hook.vy = 0;
+          wasEmpty = false;
+        }
+
+        const mass = 1 + g / 16;
+        const stiffness = 240 / (1 + g / 28);
+        const zeta = Math.max(0.55, 0.95 / Math.sqrt(mass));
+        const damping = 2 * zeta * Math.sqrt(stiffness * mass);
+        const ax = (stiffness * (mouse.x - hook.x) - damping * hook.vx) / mass;
+        const ay = (stiffness * (mouse.y - hook.y) - damping * hook.vy) / mass;
+        hook.vx += ax * dt;
+        hook.vy += ay * dt;
+        hook.x += hook.vx * dt;
+        hook.y += hook.vy * dt;
+
+        const scale = bagScale(g);
+        const length = 48 * scale;
+        const grav = 2400 / (1 + g / 90);
+        const pendDamp = 2.2 + g * 0.012;
+        pend.omega +=
+          (-(grav / length) * Math.sin(pend.theta) -
+            pendDamp * pend.omega -
+            (ax / length) * Math.cos(pend.theta)) *
+          dt;
+        pend.theta += pend.omega * dt;
+        if (pend.theta > 1.05) {
+          pend.theta = 1.05;
+          pend.omega *= 0.4;
+        } else if (pend.theta < -1.05) {
+          pend.theta = -1.05;
+          pend.omega *= 0.4;
+        }
+
+        const deg = (pend.theta * 180) / Math.PI;
+        rig.style.opacity = "1";
+        rig.setAttribute(
+          "transform",
+          `translate(${hook.x} ${hook.y}) rotate(${deg}) scale(${scale})`,
+        );
+
+        const lookL = pupilLook(
+          EYE_L.x,
+          EYE_L.y,
+          hook.x,
+          hook.y,
+          pend.theta,
+          scale,
+          mouse.x,
+          mouse.y,
+        );
+        const lookR = pupilLook(
+          EYE_R.x,
+          EYE_R.y,
+          hook.x,
+          hook.y,
+          pend.theta,
+          scale,
+          mouse.x,
+          mouse.y,
+        );
+
+        pupilL.setAttribute("cx", String(EYE_L.x + lookL.x));
+        pupilL.setAttribute("cy", String(EYE_L.y + lookL.y));
+        pupilR.setAttribute("cx", String(EYE_R.x + lookR.x));
+        pupilR.setAttribute("cy", String(EYE_R.y + lookR.y));
+        glintL.setAttribute("cx", String(EYE_L.x + lookL.x + GLINT.x));
+        glintL.setAttribute("cy", String(EYE_L.y + lookL.y + GLINT.y));
+        glintR.setAttribute("cx", String(EYE_R.x + lookR.x + GLINT.x));
+        glintR.setAttribute("cy", String(EYE_R.y + lookR.y + GLINT.y));
+
+        requestAnimationFrame(tick);
+      }
+
+      requestAnimationFrame(tick);
+    </script>
+  </body>
+</html>
