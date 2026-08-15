@@ -71,35 +71,49 @@
     </main>
 
     <svg id="stage" aria-hidden="true">
+      <defs>
+        <clipPath id="clip-l"><circle cx="0" cy="0" r="13" /></clipPath>
+        <clipPath id="clip-r"><circle cx="0" cy="0" r="13" /></clipPath>
+      </defs>
       <g id="rig" style="opacity: 0">
         <!-- Phosphor handbag-simple-fill · MIT · phosphoricons.com -->
-        <svg x="-40" y="-5" width="80" height="80" viewBox="0 0 256 256">
+        <g transform="translate(-40 -5) scale(0.3125)">
           <path
-            fill="var(--accent)"
+            fill="#4d7cff"
             d="M239.89,198.12l-14.26-120a16,16,0,0,0-16-14.12H176a48,48,0,0,0-96,0H46.33a16,16,0,0,0-16,14.12l-14.26,120A16,16,0,0,0,20,210.6a16.13,16.13,0,0,0,12,5.4H223.92A16.13,16.13,0,0,0,236,210.6,16,16,0,0,0,239.89,198.12ZM128,32a32,32,0,0,1,32,32H96A32,32,0,0,1,128,32Z"
           />
-        </svg>
-        <circle id="eye-l" cx="-13" cy="44" r="11.5" fill="var(--on-accent)" />
-        <circle id="eye-r" cx="13" cy="44" r="11.5" fill="var(--on-accent)" />
-        <circle id="pupil-l" cx="-13" cy="44" r="5.2" fill="var(--pupil)" />
-        <circle id="pupil-r" cx="13" cy="44" r="5.2" fill="var(--pupil)" />
-        <circle id="glint-l" cx="-15.2" cy="41.6" r="1.7" fill="var(--on-accent)" />
-        <circle id="glint-r" cx="10.8" cy="41.6" r="1.7" fill="var(--on-accent)" />
+        </g>
+        <g id="eye-l" transform="translate(-13 40)">
+          <circle r="13" fill="#fff" stroke="#111" stroke-width="2" />
+          <g clip-path="url(#clip-l)">
+            <circle id="pupil-l" r="7" fill="#111" />
+            <circle id="glint-l" r="2.2" fill="#fff" />
+          </g>
+        </g>
+        <g id="eye-r" transform="translate(13 40)">
+          <circle r="13" fill="#fff" stroke="#111" stroke-width="2" />
+          <g clip-path="url(#clip-r)">
+            <circle id="pupil-r" r="7" fill="#111" />
+            <circle id="glint-r" r="2.2" fill="#fff" />
+          </g>
+        </g>
       </g>
     </svg>
 
     <script>
-      const EYE_L = { x: -13, y: 44 };
-      const EYE_R = { x: 13, y: 44 };
-      const PUPIL_TRAVEL = 5.4;
-      const GLINT = { x: -2.2, y: -2.4 };
+      const PUPIL_TRAVEL = 7.2;
+      const GLINT = { x: -2.4, y: -2.6 };
 
+      const stage = document.getElementById("stage");
       const weightEl = document.getElementById("weight");
       const rig = document.getElementById("rig");
+      const eyeL = document.getElementById("eye-l");
+      const eyeR = document.getElementById("eye-r");
       const pupilL = document.getElementById("pupil-l");
       const pupilR = document.getElementById("pupil-r");
       const glintL = document.getElementById("glint-l");
       const glintR = document.getElementById("glint-r");
+      const lookPt = stage.createSVGPoint();
 
       const cargo = [];
       const mouse = { x: 240, y: 180 };
@@ -138,19 +152,22 @@
         renderWeight();
       }
 
-      function pupilLook(eyeX, eyeY, hookX, hookY, theta, scale, mouseX, mouseY) {
-        const c = Math.cos(theta);
-        const s = Math.sin(theta);
-        const worldX = hookX + (eyeX * c - eyeY * s) * scale;
-        const worldY = hookY + (eyeX * s + eyeY * c) * scale;
-        const dx = mouseX - worldX;
-        const dy = mouseY - worldY;
-        const localDx = dx * c + dy * s;
-        const localDy = -dx * s + dy * c;
-        const len = Math.hypot(localDx, localDy) || 1;
+      function pupilLook(eyeGroup) {
+        const ctm = eyeGroup.getScreenCTM();
+        if (!ctm) return { x: 0, y: 0 };
+        lookPt.x = 0;
+        lookPt.y = 0;
+        const origin = lookPt.matrixTransform(ctm);
+        const dx = mouse.x - origin.x;
+        const dy = mouse.y - origin.y;
+        const inv = ctm.inverse();
+        lookPt.x = origin.x + dx;
+        lookPt.y = origin.y + dy;
+        const local = lookPt.matrixTransform(inv);
+        const len = Math.hypot(local.x, local.y) || 1;
         return {
-          x: (localDx / len) * PUPIL_TRAVEL,
-          y: (localDy / len) * PUPIL_TRAVEL,
+          x: (local.x / len) * PUPIL_TRAVEL,
+          y: (local.y / len) * PUPIL_TRAVEL,
         };
       }
 
@@ -238,35 +255,16 @@
           `translate(${hook.x} ${hook.y}) rotate(${deg}) scale(${scale})`,
         );
 
-        const lookL = pupilLook(
-          EYE_L.x,
-          EYE_L.y,
-          hook.x,
-          hook.y,
-          pend.theta,
-          scale,
-          mouse.x,
-          mouse.y,
-        );
-        const lookR = pupilLook(
-          EYE_R.x,
-          EYE_R.y,
-          hook.x,
-          hook.y,
-          pend.theta,
-          scale,
-          mouse.x,
-          mouse.y,
-        );
-
-        pupilL.setAttribute("cx", String(EYE_L.x + lookL.x));
-        pupilL.setAttribute("cy", String(EYE_L.y + lookL.y));
-        pupilR.setAttribute("cx", String(EYE_R.x + lookR.x));
-        pupilR.setAttribute("cy", String(EYE_R.y + lookR.y));
-        glintL.setAttribute("cx", String(EYE_L.x + lookL.x + GLINT.x));
-        glintL.setAttribute("cy", String(EYE_L.y + lookL.y + GLINT.y));
-        glintR.setAttribute("cx", String(EYE_R.x + lookR.x + GLINT.x));
-        glintR.setAttribute("cy", String(EYE_R.y + lookR.y + GLINT.y));
+        const lookL = pupilLook(eyeL);
+        const lookR = pupilLook(eyeR);
+        pupilL.setAttribute("cx", String(lookL.x));
+        pupilL.setAttribute("cy", String(lookL.y));
+        pupilR.setAttribute("cx", String(lookR.x));
+        pupilR.setAttribute("cy", String(lookR.y));
+        glintL.setAttribute("cx", String(lookL.x + GLINT.x));
+        glintL.setAttribute("cy", String(lookL.y + GLINT.y));
+        glintR.setAttribute("cx", String(lookR.x + GLINT.x));
+        glintR.setAttribute("cy", String(lookR.y + GLINT.y));
 
         requestAnimationFrame(tick);
       }
